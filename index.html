@@ -38,6 +38,10 @@
   .note { padding:0 18px 24px; font-size:13px; }
   select, input { font:inherit; min-height:40px; }
   .milechips, .miledetail { display:none; }
+  .estimate { margin:8px 18px 0; padding:14px 16px; }
+  .estimate h2 { margin:0 0 6px; font-size:1.05rem; }
+  .est-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:10px; }
+  .est-grid div { background:#141b13; border:1px solid var(--line); border-radius:12px; padding:10px; }
   .leaflet-control-layers { border:0; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.35); }
   .leaflet-control-layers-expanded { padding:8px 10px; color:#1b1608; }
   .leaflet-control-layers-toggle { width:40px; height:40px; }
@@ -53,7 +57,9 @@
   body.layout-mobile .milechips button.on { background:var(--hi); color:#1b1608; font-weight:700; }
   body.layout-mobile .miledetail { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 10px 12px; }
   body.layout-mobile .miledetail div { background:#141b13; border:1px solid var(--line); border-radius:12px; padding:10px; }
-  body.layout-mobile .topbar { flex-wrap:wrap; }
+  body.layout-mobile .topbar, body.layout-mobile .est-grid { flex-wrap:wrap; }
+  body.layout-mobile .est-grid { grid-template-columns:1fr; }
+  body.layout-mobile .estimate { margin:8px 10px 0; }
 </style>
 </head>
 <body>
@@ -69,6 +75,16 @@
   <h1>Mile by mile elevation</h1>
   <p class="sub">Go go go vs Around orangeville. Tap a mile to highlight that section on both routes. Use the layers button on the map for the street map or aerial.</p>
 </header>
+<section class="panel estimate">
+  <h2>Around orangeville, time estimate</h2>
+  <p class="sub">Best guess at the same effort as tonight: about <b>1 hour 33 minutes</b> moving, about <b>1 hour 45 minutes</b> door to door. Range about 1:20 to 1:43 moving.</p>
+  <div class="est-grid">
+    <div><b>Same pace</b><div class="num">1:33</div><div>9.1 mi/h, 14.08 mi</div></div>
+    <div><b>Easier</b><div class="num">1:39–1:43</div><div>8.2–8.5 mi/h, plus lights</div></div>
+    <div><b>A bit harder</b><div class="num">1:20–1:24</div><div>10–10.5 mi/h</div></div>
+  </div>
+  <p class="note" style="padding:10px 0 0">Based on the only Orangeville road ride visible in the last year: <a href="https://www.strava.com/activities/20401287320">Go go go</a>, 30 Sep 2026, 8.67 mi, 338 ft, 57:01, 9.1 mi/h, 108 W, with Milan J. The rest of the account is private, so other town rides could not be included. Mountain-bike rides are excluded; this ride is a town loop, and the plan has a similar climb rate (about 39 ft per mile tonight, about 38–41 ft per mile on the 14.08 mi loop after smoothing). Calories at the same effort land around 1,350–1,500 on Strava’s counter.</p>
+</section>
 <div class="wrap">
   <div class="panel">
     <div class="legend"><span><i class="sw" style="background:var(--strava)"></i>Go go go</span><span><i class="sw" style="background:var(--otgm)"></i>Around orangeville</span><span><i class="sw" style="background:var(--hi)"></i>Selected mile</span></div>
