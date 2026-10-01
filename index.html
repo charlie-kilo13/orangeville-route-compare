@@ -38,6 +38,9 @@
   .note { padding:0 18px 24px; font-size:13px; }
   select, input { font:inherit; min-height:40px; }
   .milechips, .miledetail { display:none; }
+  .leaflet-control-layers { border:0; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.35); }
+  .leaflet-control-layers-expanded { padding:8px 10px; color:#1b1608; }
+  .leaflet-control-layers-toggle { width:40px; height:40px; }
   body.layout-mobile .wrap { grid-template-columns:1fr; padding:10px; gap:10px; }
   body.layout-mobile header { padding:12px 12px 4px; }
   body.layout-mobile h1 { font-size:1.2rem; }
@@ -64,7 +67,7 @@
 </div>
 <header>
   <h1>Mile by mile elevation</h1>
-  <p class="sub">Go go go vs Around orangeville. Tap a mile to highlight that section on both routes.</p>
+  <p class="sub">Go go go vs Around orangeville. Tap a mile to highlight that section on both routes. Use the layers button on the map for the street map or aerial.</p>
 </header>
 <div class="wrap">
   <div class="panel">
@@ -82,7 +85,7 @@
 </div>
 <div class="panel desk-table" style="margin:0 18px 16px"><div style="padding:12px 14px 0;font-weight:650">Per-mile comparison</div><div style="overflow-x:auto;padding:4px 8px 12px"><table id="miles"></table></div></div>
 <div class="panel" style="margin:0 10px 12px"><div class="milechips" id="chips"></div><div class="miledetail" id="detail"></div></div>
-<p class="note">Sources: <a href="https://www.strava.com/activities/20401287320">Strava activity 20401287320</a> and <a href="https://onthegomap.com/?route=01a0f53e-e67b-778e-b4d2-e1bf52c0730f&context=share">On The Go Map Around orangeville</a>.</p>
+<p class="note">Sources: <a href="https://www.strava.com/activities/20401287320">Strava activity 20401287320</a> and <a href="https://onthegomap.com/?route=01a0f53e-e67b-778e-b4d2-e1bf52c0730f&context=share">On The Go Map Around orangeville</a>. Street map tiles from OpenStreetMap. Aerial tiles from Esri World Imagery. Neither needs an API key.</p>
 <script>
 const DATA = window.ROUTE_DATA;
 const MILE = 1609.344;
@@ -107,13 +110,18 @@ document.getElementById("layoutSeg").onclick = e => {
   layoutPref = b.dataset.layout; localStorage.setItem("routeLayout", layoutPref); applyLayout();
 };
 const map = L.map("map"); window.map = map;
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { attribution: "&copy; OpenStreetMap &copy; CARTO", maxZoom: 19 }).addTo(map);
+const street = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" });
+const aerial = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "Tiles &copy; Esri" });
+street.addTo(map);
+L.control.layers({ "Map": street, "Aerial": aerial }, null, { collapsed: true, position: "topright" }).addTo(map);
 const layers = {};
 const ll = r => r.coords.map(c => [c[0], c[1]]);
-layers.otgm = L.polyline(ll(DATA.otgm), { color:"#3ddc97", weight:4, opacity:.85 }).addTo(map);
-layers.strava = L.polyline(ll(DATA.strava), { color:"#fc4c02", weight:4, opacity:.9 }).addTo(map);
+layers.otgmHalo = L.polyline(ll(DATA.otgm), { color:"#ffffff", weight:7, opacity:.85 }).addTo(map);
+layers.stravaHalo = L.polyline(ll(DATA.strava), { color:"#ffffff", weight:7, opacity:.9 }).addTo(map);
+layers.otgm = L.polyline(ll(DATA.otgm), { color:"#1f8f5f", weight:4, opacity:.95 }).addTo(map);
+layers.strava = L.polyline(ll(DATA.strava), { color:"#fc4c02", weight:4, opacity:.95 }).addTo(map);
 layers.hiS = L.polyline([], { color:"#f4e27a", weight:8 }).addTo(map);
-layers.hiO = L.polyline([], { color:"#f4e27a", weight:8, opacity:.75 }).addTo(map);
+layers.hiO = L.polyline([], { color:"#f4e27a", weight:8, opacity:.85 }).addTo(map);
 map.fitBounds(L.latLngBounds(layers.strava.getLatLngs().concat(layers.otgm.getLatLngs())).pad(0.15));
 let units = "m", shiftMi = 0, selected = 0;
 const uElev = m => units === "ft" ? m * 3.28084 : m;
