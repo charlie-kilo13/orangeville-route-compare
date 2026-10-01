@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Orangeville route elevation comparison</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #10140f; --panel: #1a2118; --ink: #e8efe4; --muted: #9aab96;
+    --strava: #fc4c02; --otgm: #3ddc97; --line: #2a3528; --hi: #f4e27a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+  header { padding: 22px 28px 8px; }
+  h1 { font-size: 1.45rem; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); max-width: 820px; }
+  a { color: var(--otgm); }
+  .wrap { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px; padding: 16px 28px 28px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  #map { height: 560px; }
+  .chartbox { padding: 12px 14px 8px; }
+  canvas { width: 100%; height: 240px; display: block; cursor: crosshair; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; padding: 8px 14px 14px; color: var(--muted); font-size: 13px; }
+  label { display: flex; gap: 8px; align-items: center; }
+  input[type="range"] { width: 160px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #141b13; }
+  .card h2 { margin: 0 0 4px; font-size: 1rem; }
+  .card .tag { font-size: 12px; color: var(--muted); }
+  .num { font-size: 1.35rem; font-weight: 650; }
+  .strava { color: var(--strava); }
+  .otgm { color: var(--otgm); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 7px 8px; text-align: right; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  tr.sel { background: #2a3318; }
+  tr { cursor: pointer; }
+  tr:hover { background: #222a1d; }
+  .legend { display: flex; gap: 14px; padding: 8px 14px; font-size: 13px; }
+  .sw { width: 14px; height: 4px; display: inline-block; margin-right: 6px; vertical-align: middle; }
+  .note { color: var(--muted); font-size: 12px; padding: 0 28px 28px; max-width: 980px; }
+  @media (max-width: 980px) { .wrap { grid-template-columns: 1fr; } #map { height: 420px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Orangeville routes, mile by mile</h1>
+  <p class="sub">Elevation along Chris Kirec’s Strava ride <em>Go go go</em> and the On The Go Map loop <em>Around orangeville</em>. Hover the chart or click a mile to compare that section on the map.</p>
+</header>
+<div class="wrap">
+  <div class="panel">
+    <div class="legend">
+      <span><i class="sw" style="background:var(--strava)"></i>Go go go · Strava</span>
+      <span><i class="sw" style="background:var(--otgm)"></i>Around orangeville · On The Go Map</span>
+      <span><i class="sw" style="background:var(--hi)"></i>Selected mile</span>
+    </div>
+    <div id="map"></div>
+  </div>
+  <div class="panel">
+    <div class="stats" id="stats"></div>
+    <div class="chartbox"><canvas id="chart" height="240"></canvas></div>
+    <div class="controls">
+      <label>Units
+        <select id="units"><option value="m">metres</option><option value="ft">feet</option></select>
+      </label>
+      <label>Shift Strava start
+        <input id="shift" type="range" min="0" max="8" step="0.1" value="0" />
+        <span id="shiftval">0.0 mi</span>
+      </label>
+    </div>
+  </div>
+</div>
+<div class="panel" style="margin: 0 28px 16px;">
+  <div style="padding:12px 14px 0; font-weight:650;">Per-mile comparison</div>
+  <div style="overflow-x:auto; padding: 4px 8px 12px;">
+    <table id="miles"></table>
+  </div>
+</div>
+<p class="note">
+  Sources: <a href="https://www.strava.com/activities/20401287320">Strava activity 20401287320</a> (8.67 mi, 338 ft gain, 57:01, Orangeville, 30 Sep 2026, 8:07 PM) and
+  <a href="https://onthegomap.com/?route=01a0f53e-e67b-778e-b4d2-e1bf52c0730f&context=share">On The Go Map “Around orangeville”</a> (14.08 mi).
+  The Strava GPS file is login-walled, so that line is traced from the public activity map and anchored on downtown Orangeville. It measures about 8.6 mi here versus 8.67 mi on Strava. Elevation is sampled from AWS Terrain Tiles, which is a bit noisier than Strava’s smoothed gain. Miles on the Strava line start at the northernmost point; drag the shift control if you want a different start.
+</p>
+<script src="data.js"></script>
+<script>
+const DATA = window.ROUTE_DATA;
+const MILE = 1609.344;
+const map = L.map("map", { zoomControl: true });
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+  attribution: "&copy; OpenStreetMap &copy; CARTO", maxZoom: 19
+}).addTo(map);
+const layers = {};
+function latlngs(route) { return route.coords.map(c => [c[0], c[1]]); }
+layers.otgm = L.polyline(latlngs(DATA.otgm), { color: "#3ddc97", weight: 4, opacity: 0.85 }).addTo(map);
+layers.strava = L.polyline(latlngs(DATA.strava), { color: "#fc4c02", weight: 4, opacity: 0.9 }).addTo(map);
+layers.hiS = L.polyline([], { color: "#f4e27a", weight: 8, opacity: 0.95 }).addTo(map);
+layers.hiO = L.polyline([], { color: "#f4e27a", weight: 8, opacity: 0.75 }).addTo(map);
+const all = layers.strava.getLatLngs().concat(layers.otgm.getLatLngs());
+map.fitBounds(L.latLngBounds(all).pad(0.15));
+
+let units = "m";
+let shiftMi = 0;
+let selected = 0;
+
+function uElev(m) { return units === "ft" ? m * 3.28084 : m; }
+function uLabel() { return units === "ft" ? "ft" : "m"; }
+function fmt(m, d=0) { return uElev(m).toFixed(d); }
+
+function sliceRoute(route, startM, endM) {
+  const d = route.dist_m, e = route.elev_m, c = route.coords;
+  const pts = [], elev = [];
+  for (let i = 0; i < d.length; i++) {
+    if (d[i] >= startM && d[i] <= endM) { pts.push(c[i]); elev.push(e[i]); }
+  }
+  if (!pts.length) return { pts, gain: 0, loss: 0, min: 0, max: 0, start: 0, end: 0, grade: 0 };
+  let gain = 0, loss = 0;
+  for (let i = 1; i < elev.length; i++) {
+    const de = elev[i] - elev[i-1];
+    if (de > 0.6) gain += de; else if (de < -0.6) loss -= de;
+  }
+  const min = Math.min(...elev), max = Math.max(...elev);
+  const net = elev[elev.length-1] - elev[0];
+  const dist = Math.max(1, endM - startM);
+  return { pts, gain, loss, min, max, start: elev[0], end: elev[elev.length-1], grade: net / dist * 100 };
+}
+
+function milesFor(route, shiftM) {
+  const len = route.length_m;
+  const n = Math.ceil(len / MILE);
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i * MILE + shiftM) % len;
+    const b = Math.min(len, a + MILE);
+    let sec;
+    if (b >= a) sec = sliceRoute(route, a, b);
+    else {
+      const s1 = sliceRoute(route, a, len);
+      const s2 = sliceRoute(route, 0, b);
+      sec = {
+        pts: s1.pts.concat(s2.pts),
+        gain: s1.gain + s2.gain, loss: s1.loss + s2.loss,
+        min: Math.min(s1.min, s2.min), max: Math.max(s1.max, s2.max),
+        start: s1.start, end: s2.end, grade: ((s2.end - s1.start) / MILE) * 100
+      };
+    }
+    rows.push(sec);
+  }
+  return rows;
+}
+
+function renderStats() {
+  const s = DATA.strava, o = DATA.otgm;
+  const sg = gainOf(s), og = gainOf(o);
+  document.getElementById("stats").innerHTML = `
+    <div class="card"><h2 class="strava">Go go go</h2><div class="tag">Strava ride · official 8.67 mi / 338 ft</div>
+      <div class="num">${(s.length_m/MILE).toFixed(2)} mi</div>
+      <div>sampled gain ${fmt(sg,0)} ${uLabel()} · elev ${fmt(Math.min(...s.elev_m),0)}–${fmt(Math.max(...s.elev_m),0)} ${uLabel()}</div></div>
+    <div class="card"><h2 class="otgm">Around orangeville</h2><div class="tag">On The Go Map plan · 14.08 mi</div>
+      <div class="num">${(o.length_m/MILE).toFixed(2)} mi</div>
+      <div>sampled gain ${fmt(og,0)} ${uLabel()} · elev ${fmt(Math.min(...o.elev_m),0)}–${fmt(Math.max(...o.elev_m),0)} ${uLabel()}</div></div>`;
+}
+function gainOf(route) {
+  let g = 0;
+  for (let i = 1; i < route.elev_m.length; i++) {
+    const de = route.elev_m[i] - route.elev_m[i-1];
+    if (de > 0.6) g += de;
+  }
+  return g;
+}
+
+function renderTable() {
+  const sRows = milesFor(DATA.strava, shiftMi * MILE);
+  const oRows = milesFor(DATA.otgm, 0);
+  const n = Math.max(sRows.length, oRows.length);
+  let html = `<tr><th>Mile</th><th>Strava gain</th><th>OTGM gain</th><th>Strava net</th><th>OTGM net</th><th>Strava grade</th><th>OTGM grade</th><th>Elev gap</th></tr>`;
+  for (let i = 0; i < n; i++) {
+    const s = sRows[i], o = oRows[i];
+    const gap = (s && o) ? (s.start - o.start) : null;
+    html += `<tr data-i="${i}" class="${i===selected?'sel':''}">
+      <td>${i+1}${s && i===sRows.length-1 ? " (part)" : ""}</td>
+      <td>${s ? fmt(s.gain,0)+" "+uLabel() : "—"}</td>
+      <td>${o ? fmt(o.gain,0)+" "+uLabel() : "—"}</td>
+      <td>${s ? (s.end-s.start>0?"+":"")+fmt(s.end-s.start,0) : "—"}</td>
+      <td>${o ? (o.end-o.start>0?"+":"")+fmt(o.end-o.start,0) : "—"}</td>
+      <td>${s ? s.grade.toFixed(1)+"%" : "—"}</td>
+      <td>${o ? o.grade.toFixed(1)+"%" : "—"}</td>
+      <td>${gap==null ? "—" : (gap>0?"+":"")+fmt(gap,0)+" "+uLabel()}</td>
+    </tr>`;
+  }
+  const table = document.getElementById("miles");
+  table.innerHTML = html;
+  table.querySelectorAll("tr[data-i]").forEach(tr => tr.onclick = () => select(+tr.dataset.i));
+}
+
+function select(i) {
+  selected = i;
+  const sRows = milesFor(DATA.strava, shiftMi * MILE);
+  const oRows = milesFor(DATA.otgm, 0);
+  layers.hiS.setLatLngs((sRows[i] && sRows[i].pts || []).map(c => [c[0], c[1]]));
+  layers.hiO.setLatLngs((oRows[i] && oRows[i].pts || []).map(c => [c[0], c[1]]));
+  const pts = layers.hiS.getLatLngs().concat(layers.hiO.getLatLngs());
+  if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.4));
+  renderTable();
+  drawChart();
+}
+
+function drawChart() {
+  const canvas = document.getElementById("chart");
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = 240;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  const pad = { l: 46, r: 12, t: 16, b: 28 };
+  const maxMi = Math.max(DATA.strava.length_m, DATA.otgm.length_m) / MILE;
+  const elevs = DATA.strava.elev_m.concat(DATA.otgm.elev_m).map(uElev);
+  const emin = Math.min(...elevs) - (units==="ft"?20:6);
+  const emax = Math.max(...elevs) + (units==="ft"?20:6);
+  const X = mi => pad.l + (mi / maxMi) * (w - pad.l - pad.r);
+  const Y = ev => pad.t + (1 - (uElev(ev) - emin) / (emax - emin)) * (h - pad.t - pad.b);
+  ctx.fillStyle = "rgba(244,226,122,0.12)";
+  ctx.fillRect(X(selected), pad.t, X(selected+1)-X(selected), h-pad.t-pad.b);
+  ctx.strokeStyle = "#2a3528"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, h-pad.b); ctx.lineTo(w-pad.r, h-pad.b); ctx.stroke();
+  ctx.fillStyle = "#9aab96"; ctx.font = "11px sans-serif";
+  ctx.fillText(fmt(emax,0)+" "+uLabel(), 4, pad.t+8);
+  ctx.fillText(fmt(emin,0), 4, h-pad.b);
+  for (let m = 0; m <= maxMi; m++) {
+    const x = X(m);
+    ctx.fillText(m+"", x-4, h-10);
+  }
+  function stroke(route, color, shift) {
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+    const len = route.length_m;
+    route.dist_m.forEach((d, i) => {
+      const mi = ((d - shift) % len + len) % len / MILE;
+      const x = X(mi), y = Y(route.elev_m[i]);
+      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+  stroke(DATA.otgm, "#3ddc97", 0);
+  stroke(DATA.strava, "#fc4c02", shiftMi * MILE);
+  ctx.fillStyle = "#9aab96";
+  ctx.fillText("miles", w-48, h-10);
+}
+canvasHit();
+function canvasHit() {
+  const canvas = document.getElementById("chart");
+  canvas.addEventListener("mousemove", ev => {
+    const rect = canvas.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const maxMi = Math.max(DATA.strava.length_m, DATA.otgm.length_m) / MILE;
+    const padL = 46, padR = 12;
+    const mi = (x - padL) / (rect.width - padL - padR) * maxMi;
+    if (mi < 0) return;
+    const i = Math.floor(mi);
+    if (i !== selected && i >= 0 && i < 15) select(i);
+  });
+}
+
+document.getElementById("units").onchange = e => { units = e.target.value; renderStats(); renderTable(); drawChart(); };
+document.getElementById("shift").oninput = e => {
+  shiftMi = +e.target.value;
+  document.getElementById("shiftval").textContent = shiftMi.toFixed(1)+" mi";
+  renderTable(); drawChart(); select(selected);
+};
+window.addEventListener("resize", drawChart);
+renderStats(); select(0);
+</script>
+</body>
+</html>
